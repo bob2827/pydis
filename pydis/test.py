@@ -18,6 +18,7 @@ def testList():
     for i in l:
         print i
     print l[0:10]
+    print l[slice(0,10,2)]
 
 if __name__ == "__main__":
     testList()
