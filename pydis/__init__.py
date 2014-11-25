@@ -2,8 +2,10 @@ import sys
 import collections
 import redis
 import json
+import inspect
 
 #https://stackoverflow.com/questions/4984647/accessing-dict-keys-like-an-attribute-in-python
+"""
 class attrdict(dict):
     def __init__(self, *args, **kwargs):
         super(attrdict, self).__init__(*args, **kwargs)
@@ -24,13 +26,57 @@ class rdict(attrdict):
 			d[k] = json.loads(v)
 		super(rdict, self).__init__(d)
 
-class redisDict(collections.MutableMapping):
-    def __init__(self, name, conn):
-        self.name = name
-        self.rdb = redis.StrictRedis(**conn)
+class Dict():
+    def __init__(self):
+
+    def widget(self, name):
+        return redisDict(name)
+"""
+
+
+__redisConn__ = None
+
+def connect(settings):
+    global __redisConn__
+    __redisConn__ = redis.StrictRedis(**settings)
+
+class pydisBase(object):
+    def __init__(self, name):
+        self._rname = name
+        for mbr_name, val in inspect.getmembers(self):
+            if isinstance(val, syncFactory):
+                ch_redis_name = "%s:%s" % (self._rname, mbr_name)
+                exec("self.%s = val.generate('%s')" % (mbr_name, ch_redis_name))
+
+
+class syncFactory(object):
+    def __init__(self):
+        pass
+
+class syncDictFactory(syncFactory):
+    def __init__(self):
+        pass
+
+    def generate(self, name):
+        return syncDict(name)
+
+class syncListFactory(syncFactory):
+    def __init__(self):
+        pass
+
+    def generate(self, name):
+        return syncList(name)
+
+class syncDict(collections.MutableMapping):
+    def __init__(self, name):
+        self._rname = name
+
+    @property
+    def rdb(self):
+        return __redisConn__
 
     def __getitem__(self, key):
-        v = self.rdb.hget(self.name, key)
+        v = self.rdb.hget(self._rname, key)
         try:
             return json.loads(v)
         except TypeError:
@@ -38,22 +84,25 @@ class redisDict(collections.MutableMapping):
 
     def __setitem__(self, key, value):
         v = json.dumps(value)
-        return self.rdb.hset(self.name, key, v)
+        return self.rdb.hset(self._rname, key, v)
 
     def __delitem__(self, key):
-        return self.rdb.hdel(self.name, key)
+        return self.rdb.hdel(self._rname, key)
 
     def __iter__(self):
-        return iter(self.rdb.hkeys(self.name))
+        return iter(self.rdb.hkeys(self._rname))
 
     def __len__(self):
-        return self.rdb.hlen(self.name)
+        return self.rdb.hlen(self._rname)
 
-class redisList(collections.MutableSequence):
-    def __init__(self, name, conn, tag="__TAG__"):
-        self.name = name
-        self.rdb = redis.StrictRedis(**conn)
+class syncList(collections.MutableSequence):
+    def __init__(self, name, tag="__TAG__"):
+        self._rname = name
         self.tag = tag
+
+    @property
+    def rdb(self):
+        return __redisConn__
 
     def __adjbound__(self, key, l, check=True):
         if key < 0:
@@ -67,11 +116,11 @@ class redisList(collections.MutableSequence):
         l = self.__len__()
         if isinstance(key, int):
             if key == 0:
-                return self.rdb.lpush(self.name, v)
+                return self.rdb.lpush(self._rname, v)
             elif key >= l:
-                return self.rdb.rpush(self.name, v)
+                return self.rdb.rpush(self._rname, v)
             else:
-                return self.rdb.lset(self.name, key, v)
+                return self.rdb.lset(self._rname, key, v)
         else:
             raise TypeError("an integer is required")
 
@@ -79,9 +128,9 @@ class redisList(collections.MutableSequence):
         l = self.__len__()
         key = self.__adjbound__(key, l)
         if key == 0:
-            return self.rdb.lpop(self.name)
+            return self.rdb.lpop(self._rname)
         elif key == l-1: #or key == -1:
-            return self.rdb.rpop(self.name)
+            return self.rdb.rpop(self._rname)
         elif (key >= l) or (key < 0):
             if check:
                 raise IndexError("list assignment index out of range")
@@ -90,8 +139,8 @@ class redisList(collections.MutableSequence):
         else:
             print >> sys.stderr, "WARNING: Removing element %d from list of length %d" % (key, l)
             print >> sys.stderr, "Non-head/tail items have O(n) complexity in Redis"
-            self.rdb.lset(self.name, key, self.tag)
-            return self.rdb.lrem(self.name, 1, self.tag)
+            self.rdb.lset(self._rname, key, self.tag)
+            return self.rdb.lrem(self._rname, 1, self.tag)
 
     def __getitem__(self, key):
         l = self.__len__()
@@ -99,20 +148,20 @@ class redisList(collections.MutableSequence):
 
         if isinstance(key, slice):
             if key.step == 1 or key.step == None:
-                v = self.rdb.lrange(self.name, key.start, key.stop-1)
+                v = self.rdb.lrange(self._rname, key.start, key.stop-1)
                 v = [json.loads(val) for val in v]
             else:
                 stop = key.stop
                 if stop > l:
                     stop = l
                 r = range(key.start, stop, key.step)
-                val = [self.rdb.lindex(self.name, v) for v in r]
+                val = [self.rdb.lindex(self._rname, v) for v in r]
                 v = [json.loads(j) for j in val]
 
         elif isinstance(key, int):
             if key >= l:
                 raise IndexError("list index out of range")
-            v = self.rdb.lindex(self.name, key)
+            v = self.rdb.lindex(self._rname, key)
             v = json.loads(v)
 
         else:
@@ -185,20 +234,20 @@ class redisList(collections.MutableSequence):
             raise Exception("PANIC")
 
     def __len__(self):
-        return self.rdb.llen(self.name)
+        return self.rdb.llen(self._rname)
 
     def insert(self, key, val):
         v = json.dumps(val)
         l = self.__len__()
         if key == 0:
-            return self.rdb.lpush(self.name, v)
+            return self.rdb.lpush(self._rname, v)
         elif key >= l:
-            return self.rdb.rpush(self.name, v)
+            return self.rdb.rpush(self._rname, v)
         else:
             print >> sys.stderr, "WARNING: Inserting element at position %d on list of length %d" % (key, l)
             print >> sys.stderr, "Non-head/tail items have O(n) complexity in Redis"
-            t = self.rdb.lindex(self.name, key)
-            self.rdb.lset(self.name, key, self.tag)
-            self.rdb.linsert(self.name, 'BEFORE', self.tag, v)
-            self.rdb.linsert(self.name, 'BEFORE', self.tag, t)
-            self.rdb.lrem(self.name, 1, self.tag)
+            t = self.rdb.lindex(self._rname, key)
+            self.rdb.lset(self._rname, key, self.tag)
+            self.rdb.linsert(self._rname, 'BEFORE', self.tag, v)
+            self.rdb.linsert(self._rname, 'BEFORE', self.tag, t)
+            self.rdb.lrem(self._rname, 1, self.tag)
