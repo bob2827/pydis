@@ -26,7 +26,7 @@ setup(name='pydis',
       author='Bob Sherbert',
       author_email='bob@carbidelabs.com',
       packages=['pydis'],
-      install_requires=['redis', 'json'],
+      install_requires=['redis'],
       zip_safe=True,
      )
 
