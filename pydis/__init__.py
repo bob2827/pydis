@@ -53,9 +53,9 @@ class Dict():
 
 __redisConn__ = None
 
-def connect(settings):
+def connect(**kwargs):
     global __redisConn__
-    __redisConn__ = redis.StrictRedis(**settings)
+    __redisConn__ = redis.StrictRedis(**kwargs)
 
 class pydisBase(object):
     def __init__(self, name):
@@ -268,3 +268,18 @@ class syncList(collections.MutableSequence):
             self.rdb.linsert(self._rname, 'BEFORE', self.tag, v)
             self.rdb.linsert(self._rname, 'BEFORE', self.tag, t)
             self.rdb.lrem(self._rname, 1, self.tag)
+
+"""
+Provides 2D mapping capability
+d = syncNestedDict('prefix')
+Python                Redis
+d['a']['b'] = 10 -->  prefix:a [b = 10, c = 20]
+d['a']['c'] = 20
+"""
+class syncNestedDict(object):
+    def __init__(self, prefix):
+        self.prefix = prefix
+
+    def __getitem__(self, key):
+        sd = syncDict("%s:%s" % (self.prefix, key))
+        return sd
