@@ -97,7 +97,7 @@ class syncDict(collections.MutableMapping):
         try:
             return json.loads(v)
         except TypeError:
-            raise KeyError
+            raise
 
     def __setitem__(self, key, value):
         v = json.dumps(value)
@@ -276,10 +276,16 @@ Python                Redis
 d['a']['b'] = 10 -->  prefix:a [b = 10, c = 20]
 d['a']['c'] = 20
 """
-class syncNestedDict(object):
+class syncNestedDict(collections.Mapping):
     def __init__(self, prefix):
         self.prefix = prefix
 
     def __getitem__(self, key):
         sd = syncDict("%s:%s" % (self.prefix, key))
         return sd
+
+    def __iter__(self):
+        return (s.split(':')[1] for s in __redisConn__.keys("%s:*" % self.prefix))
+
+    def __len__(self):
+        return len(__redisConn__.keys("%s:*" % self.prefix))
