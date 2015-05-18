@@ -280,9 +280,16 @@ class syncNestedDict(collections.Mapping):
     def __init__(self, prefix):
         self.prefix = prefix
 
+    @property
+    def rdb(self):
+        return __redisConn__
+
     def __getitem__(self, key):
         sd = syncDict("%s:%s" % (self.prefix, key))
         return sd
+
+    def __delitem__(self, key):
+        return self.rdb.delete("%s:%s" % (self.prefix, key))
 
     def __iter__(self):
         return (s.split(':')[1] for s in __redisConn__.keys("%s:*" % self.prefix))
