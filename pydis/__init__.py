@@ -56,6 +56,7 @@ __redisConn__ = None
 def connect(**kwargs):
     global __redisConn__
     __redisConn__ = redis.StrictRedis(**kwargs)
+    return __redisConn__
 
 class pydisBase(object):
     def __init__(self, name):
