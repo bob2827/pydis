@@ -98,7 +98,7 @@ class syncDict(collections.MutableMapping):
         try:
             return json.loads(v)
         except TypeError:
-            raise
+            raise KeyError(key)
 
     def __setitem__(self, key, value):
         v = json.dumps(value)
