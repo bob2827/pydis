@@ -1,6 +1,68 @@
-Pydis is a transparent redis binding for basic python types It acts as a thin
-wrapper around redis-py functinos toprovides list-like and dict-like types that
-directly access corresponding redis types.
+Pydis provides a transparent access mechanism for Redis from Python. It exposes
+redis primitives (lists, dicts) by overriding the built in native access
+mechanism for the equivalent Python type. It uses the redis-py library to
+facilitate the data exchange and passes through any connection options redis-py
+is capable of handling.
 
-For example:
-l = pydis.list(
+For example a pydis list operates in the following manner:
+
+    py>> import pydis   # First, initialize the module (same arguments as
+                        # redis-py)
+    py>> pd = pydis.pydis(host='localhost', port=6379, db=15)
+
+    py>> l = pd.list('mylist') # Obtain a list-like object that will store
+                                  # the the redis key 'mylist'.
+
+    py>> l.append(2)              # Manipulate the object as you would a python
+    py>> l.append(3)              # list
+    py>> l.extend([5, 7])
+    py>> l.pop()
+
+    In redis we now have:
+    rd>> lrange mylist 0 -1
+    1) "2"
+    2) "3"
+    3) "5"
+
+The access semantics for a python list have been preserved as closely as
+possible while using redis as a storage backend. All access to the redis
+database is synchronous and blocking, there is no caching within the python
+interpreter.
+
+Correspondingly for a dict:
+    py>> d = pd.dict('mydict')
+    py>> d['somekey'] = 'astringkey'
+    py>> d['numkey'] = 1234
+    py>> d['complex'] = ["any", "json", {"encodable": "structure"}]
+    py>> d['dontneed'] = 'soonforgotten'
+    py>> del d['dontneed']
+
+    And in redis:
+    rd>> hgetall mydict
+     1) "somekey"
+     2) "\"astringkey\""
+     3) "numkey"
+     4) "1234"
+     5) "complex"
+     6) "[\"any\", \"json\", {\"encodable\": \"structure\"}]"
+
+Additionally, pydis provides a mechanism for a 'nestedDict', which is a two
+dimensional array. Such arrays are commonly represented in redis using the
+the naming convention: "arrayName:firstDimKeyName"
+
+    py>> n = pd.nested('nestdict')
+    py>> n['p1']['k1'] = 1234
+    py>> n['p2']['m1'] = 4567
+    py>> n['p1']['k2'] = "somestring"
+
+    rd>> keys nestdict*
+    nestdict:p1
+    nestdict:p2
+    rd>> hgetall nestdict:p1
+    k1
+    1234
+    k2
+    "somestring"
+    rd>> hgetall nestdict:p2
+    m1
+    4567

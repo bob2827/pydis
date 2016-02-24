@@ -1,5 +1,5 @@
 # Pydis - Transparent Redis bindings for Python
-# Copyright (C) 2014-2015 Bob Sherbert
+# Copyright (C) 2014-2016 Bob Sherbert
 # bob.sherbert@gmail.com
 #
 # This program is free software: you can redistribute it and/or modify
@@ -19,36 +19,6 @@ import sys
 import collections
 import redis
 import json
-import inspect
-
-#https://stackoverflow.com/questions/4984647/accessing-dict-keys-like-an-attribute-in-python
-"""
-class attrdict(dict):
-    def __init__(self, *args, **kwargs):
-        super(attrdict, self).__init__(*args, **kwargs)
-        self.__dict__ = self
-
-    def __save__(self, rdb, name):
-	d = {}
-	rdb.delete(name)
-	for k,v in self.items():
-		d[k] = json.dumps(v)
-	rdb.hmset(name, d)
-
-class rdict(attrdict):
-	def __init__(self, rdb, name):
-		d = rdb.hgetall(name)
-		print d
-		for k,v in d.items():
-			d[k] = json.loads(v)
-		super(rdict, self).__init__(d)
-
-class Dict():
-    def __init__(self):
-
-    def widget(self, name):
-        return redisDict(name)
-"""
 
 class pydis(object):
     def __init__(self, **kwargs):
@@ -210,7 +180,6 @@ class syncList(collections.MutableSequence, expireFeature):
     def __delitem__(self, key):
         l = self.__len__()
         if isinstance(key, slice):
-            print key
             start = key.start
             stop = key.stop
             step = 1
