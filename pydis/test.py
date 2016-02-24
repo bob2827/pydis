@@ -4,8 +4,9 @@ import json
 import redis
 import unittest
 import collections
+import time
 
-import base
+from . import base
 
 settings = {'host':'localhost', 'port':6379, 'db':15}
 compare = lambda x, y: collections.Counter(x) == collections.Counter(y)
@@ -111,6 +112,41 @@ class dictTesting(unittest.TestCase):
         del rd['c']
         assert len(rd.keys()) == 1
         assert jd({'a':1}) == jd(rd.native())
+
+def numStats(i):
+    d = {}
+    if i%2:
+        d['even'] = False
+    else:
+        d['even'] = True
+    d['squared'] = i**2
+    d['half'] = i/2.0
+    d['thrice'] = i*3
+    d['timestamp'] = str(time.time())
+    return d
+
+class cacheTesting(unittest.TestCase):
+    def setUp(self):
+        self.pd = base.pydis(**settings)
+        self.pd.__redisConn__.flushdb()
+
+    def test_cache_native(self):
+        print "Test Cache native()"
+        d = self.pd.cached('t1cache', numStats, 3)
+        n = d[3].native()
+        assert len(n)
+
+    def test_cache_expiry(self):
+        print "Test Cache Expiry"
+        d = self.pd.cached('t2cache', numStats, 3)
+        assert d[2]['even'] == True
+        t1 = d[2]['timestamp']
+        time.sleep(2)
+        t2 = d[2]['timestamp']
+        time.sleep(2)
+        t3 = d[2]['timestamp']
+        assert t1 == t2
+        assert t1 != t3
 
 if __name__ == "__main__":
     unittest.main()

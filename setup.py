@@ -21,7 +21,7 @@ from setuptools import setup, find_packages
 #https://pythonhosted.org/an_example_pypi_project/setuptools.html
 
 setup(name='pydis',
-      version='0.3',
+      version='0.4',
       description='',
       author='Bob Sherbert',
       author_email='bob@carbidelabs.com',

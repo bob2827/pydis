@@ -36,11 +36,17 @@ class pydis(object):
     def nested(self, prefix):
         return syncNestedDict(prefix, self.__redisConn__)
 
-class expireFeature(object):
+    def cached(self, prefix, generator, expiry):
+        return cacheNestedDict(prefix, self.__redisConn__, generator, expiry)
+
+class commonFeature(object):
     def expire(self, timeout):
         self.rdb.expire(self._rname, timeout)
 
-class syncDict(collections.MutableMapping, expireFeature):
+    def wipe(self):
+        self.rdb.delete(self._rname)
+
+class syncDict(collections.MutableMapping, commonFeature):
     def __init__(self, name, rdb):
         self._rname = name
         self.rdb = rdb
@@ -74,7 +80,7 @@ class syncDict(collections.MutableMapping, expireFeature):
             dr[k] = json.loads(v)
         return dr
 
-class syncList(collections.MutableSequence, expireFeature):
+class syncList(collections.MutableSequence, commonFeature):
     def __init__(self, name, rdb, tag="__TAG__"):
         self._rname = name
         self.tag = tag
@@ -263,3 +269,71 @@ class syncNestedDict(collections.Mapping):
 
     def expire(self, key, timeout):
         self.rdb.expire("%s:%s" % (self.prefix, key), timeout)
+
+"""
+cache(Nested)Dict allows you to build a time-limited cache of the return values
+of a given generator function while benefiting from the same convenient access
+mechanism provided by syncNestedDict (pass through access to redis hash object).
+
+chacheNestedDict will return a dict-like object whose values follow the
+following pattern:
+
+d['key'] === generator(key)
+
+Where generator(key) must return a dict-like object. So that:
+
+d[key][subkey] === generator(key)[subkey]
+
+The return value of generator() for a given argument is assumed to be stable
+for at least _expiry_ seconds. When a key _k_ is initially accessed (or
+re-accessed after its _expiry_ time has passed), generator(k) is called and its
+return value is stored as a hash in redis.
+"""
+class cacheNestedDict(syncNestedDict):
+    def __init__(self, prefix, rdb, generator, expiry):
+        self.generator = generator
+        self.expiry = expiry
+        super(cacheNestedDict, self).__init__(prefix, rdb)
+
+    def __getitem__(self, key):
+        sd = cacheDict(self.prefix, key, self.rdb, self)
+        return sd
+
+class cacheDict(syncDict):
+    def __init__(self, prefix, key, rdb, parent):
+        self.parent = parent
+        self.prefix = prefix
+        self.key = key
+        super(cacheDict, self).__init__("%s:%s" % (self.prefix, key), rdb)
+
+    def refresh(self, force=False):
+        if (self.rdb.ttl(self._rname) <= 0) or force:
+            self.wipe()
+            r = self.parent.generator(self.key)
+            for k,v in r.items():
+                self.__setitem__(k, v)
+            self.expire(self.parent.expiry)
+
+    def native(self):
+        self.refresh()
+        return super(cacheDict, self).native()
+
+    def __len__(self):
+        self.refresh()
+        return super(cacheDict, self).__len__()
+
+    def __iter__(self):
+        self.refresh()
+        return super(cacheDict, self).__iter__()
+
+    def __getitem__(self, key):
+        v = self.rdb.hget(self._rname, key)
+        try:
+            return json.loads(v)
+        except TypeError:
+            try:
+                self.refresh()
+                v = self.rdb.hget(self._rname, key)
+                return json.loads(v)
+            except TypeError:
+                raise KeyError(key)
