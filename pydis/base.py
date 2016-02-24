@@ -65,6 +65,15 @@ class syncDict(collections.MutableMapping, expireFeature):
     def __len__(self):
         return self.rdb.hlen(self._rname)
 
+    def native(self):
+        """ Return a native python dict containing the same information as the
+        redis backing key for this object """
+        d = self.rdb.hgetall(self._rname)
+        dr = {}
+        for k,v in d.items():
+            dr[k] = json.loads(v)
+        return dr
+
 class syncList(collections.MutableSequence, expireFeature):
     def __init__(self, name, rdb, tag="__TAG__"):
         self._rname = name
@@ -72,6 +81,9 @@ class syncList(collections.MutableSequence, expireFeature):
         self.rdb = rdb
 
     def native(self):
+        """ Return a native python list containing the same information as the
+        redis backing key for this object """
+
         l = []
         for i in range(len(self)):
             l.append(self[i])
